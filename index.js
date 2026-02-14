@@ -9,7 +9,13 @@ const eventRoutes = require("./routes/event.routes");
 const attendanceRoutes = require("./routes/attendance.routes");
 
 const app = express();
-app.use(cors());
+
+// 🔥 Proper CORS for production
+app.use(cors({
+  origin: "*", // you can restrict later
+  credentials: true
+}));
+
 app.use(express.json());
 
 connectDB();
@@ -19,7 +25,9 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/attendance", attendanceRoutes);
 
-app.listen(5000, () => {
-  console.log("Server running on http://localhost:5000");
-});
+// ✅ IMPORTANT FIX FOR RENDER
+const PORT = process.env.PORT || 5000;
 
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
