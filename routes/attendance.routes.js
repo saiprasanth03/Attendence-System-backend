@@ -2,6 +2,7 @@ const router = require("express").Router();
 const Attendance = require("../models/Attendance");
 const Event = require("../models/Event");
 const auth = require("../middleware/auth");
+const axios = require("axios");
 
 // =====================================
 // HELPER: POINT IN POLYGON (lng, lat)
@@ -29,6 +30,133 @@ function isPointInsidePolygon(point, polygon) {
 // =====================================
 // MARK ATTENDANCE
 // =====================================
+// router.post("/mark", auth(["member"]), async (req, res) => {
+//   try {
+//     const { qrToken, latitude, longitude } = req.body;
+
+//     if (!qrToken) {
+//       return res.status(400).json("QR token missing");
+//     }
+
+//     if (latitude == null || longitude == null) {
+//       return res.status(400).json("Location required");
+//     }
+
+//     const parts = qrToken.split("-");
+//     if (parts.length !== 2) {
+//       return res.status(400).json("Invalid QR format");
+//     }
+
+//     const eventId = parts[0];
+//     const scannedWindow = parseInt(parts[1]);
+
+//     const foundEvent = await Event.findById(eventId);
+
+//     if (!foundEvent) {
+//       return res.status(400).json("Event not found");
+//     }
+
+//     if (!foundEvent.isActive) {
+//       return res.status(400).json("Event not active");
+//     }
+
+//     // =============================
+//     // QR TIME VALIDATION
+//     // =============================
+//     const currentWindow = Math.floor(Date.now() / 50000);
+
+//     if (
+//       scannedWindow !== currentWindow &&
+//       scannedWindow !== currentWindow - 1
+//     ) {
+//       return res.status(400).json("QR expired");
+//     }
+
+//     // =============================
+//     // LOCATION VALIDATION (ONLY ONCE)
+//     // =============================
+//     if (foundEvent.type === "offline") {
+//       if (!foundEvent.allowedRegion || foundEvent.allowedRegion.length === 0) {
+//         return res.status(400).json("Event location not configured");
+//       }
+
+//       const isInside = isPointInsidePolygon(
+//         [Number(longitude), Number(latitude)],
+//         foundEvent.allowedRegion
+//       );
+
+//       if (!isInside) {
+//         return res.status(403).json("You are outside allowed region");
+//       }
+//     }
+
+//     // =============================
+//     // CREATE ATTENDANCE
+//     // =============================
+//     // =============================
+//     // REVERSE GEOCODING
+//     // =============================
+//     let address = "";
+
+//     try {
+//       const geoRes = await axios.get(
+//         "https://nominatim.openstreetmap.org/reverse",
+//         {
+//           params: {
+//             lat: latitude,
+//             lon: longitude,
+//             format: "json",
+//           },
+//           headers: {
+//             "User-Agent": "gdg-attendance-app",
+//           },
+//         }
+//       );
+
+//       address = geoRes.data.display_name || "";
+//     } catch (geoError) {
+//       console.log("Geocoding failed:", geoError.message);
+//     }
+// console.log("Latitude:", latitude);
+// console.log("Longitude:", longitude);
+// console.log("Address:", address);
+
+//     // =============================
+//     // CREATE ATTENDANCE
+//     // =============================
+//     await Attendance.create({
+//       userId: req.user.id,
+//       eventId: foundEvent._id,
+//       latitude: Number(latitude),
+//       longitude: Number(longitude),
+//       address,
+//       ipAddress: req.ip,
+//     });
+
+
+//     return res.json("Attendance marked successfully");
+
+//   } catch (err) {
+
+//     if (err.code === 11000) {
+//       return res.status(400).json("Attendance already marked");
+//     }
+
+//     console.error("MARK ATTENDANCE ERROR:", err);
+//     return res.status(500).json("Server error");
+//   }
+// });
+
+
+
+
+
+
+
+
+
+
+
 router.post("/mark", auth(["member"]), async (req, res) => {
   try {
     const { qrToken, latitude, longitude } = req.body;
@@ -51,6 +179,7 @@ router.post("/mark", auth(["member"]), async (req, res) => {
 
     const foundEvent = await Event.findById(eventId);
 
+    // ✅ ALWAYS check existence first
     if (!foundEvent) {
       return res.status(400).json("Event not found");
     }
@@ -90,20 +219,63 @@ router.post("/mark", auth(["member"]), async (req, res) => {
     }
 
     // =============================
+    // REVERSE GEOCODING
+    // =============================
+    console.log("Incoming coordinates:", latitude, longitude);
+
+    let address = `Lat: ${latitude}, Lng: ${longitude}`;
+
+    try {
+
+      const geoRes = await axios.get(
+
+        "https://nominatim.openstreetmap.org/reverse",
+        {
+          params: {
+            lat: latitude,
+            lon: longitude,
+            format: "json",
+          },
+          headers: {
+            "User-Agent": "gdg-attendance-app",
+          },
+          timeout: 5000, // prevent hanging
+        }
+        
+      );
+
+      if (geoRes.data && geoRes.data.display_name) {
+        address = geoRes.data.display_name;
+      }
+      console.log("Reverse geocoding started");
+
+    } catch (geoError) {
+      console.log("Geocoding failed. Saving coordinates instead.");
+    }
+
+console.log("Address received:", address);
+
+    // =============================
     // CREATE ATTENDANCE
     // =============================
+
+        console.log("LAT:", latitude);
+console.log("LNG:", longitude);
+console.log("ADDRESS:", address);
     await Attendance.create({
       userId: req.user.id,
       eventId: foundEvent._id,
       latitude: Number(latitude),
       longitude: Number(longitude),
+      address,
       ipAddress: req.ip,
     });
+
+
 
     return res.json("Attendance marked successfully");
 
   } catch (err) {
-
     if (err.code === 11000) {
       return res.status(400).json("Attendance already marked");
     }
@@ -112,6 +284,12 @@ router.post("/mark", auth(["member"]), async (req, res) => {
     return res.status(500).json("Server error");
   }
 });
+
+
+
+
+
+
 
 
 
