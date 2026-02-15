@@ -29,8 +29,6 @@ function isPointInsidePolygon(point, polygon) {
 // =====================================
 // MARK ATTENDANCE
 // =====================================
-const axios = require("axios");
-
 router.post("/mark", auth(["member"]), async (req, res) => {
   try {
     const { qrToken, latitude, longitude } = req.body;
@@ -57,6 +55,13 @@ router.post("/mark", auth(["member"]), async (req, res) => {
       return res.status(400).json("Event not found");
     }
 
+    if (!foundEvent.isActive) {
+      return res.status(400).json("Event not active");
+    }
+
+    // =============================
+    // QR TIME VALIDATION
+    // =============================
     const currentWindow = Math.floor(Date.now() / 50000);
 
     if (
@@ -65,51 +70,23 @@ router.post("/mark", auth(["member"]), async (req, res) => {
     ) {
       return res.status(400).json("QR expired");
     }
-    if (!foundEvent.isActive) {
-      return res.status(400).json("Event not active");
-    }
 
     // =============================
-    // 🔥 REGION VALIDATION RESTORED
+    // LOCATION VALIDATION (ONLY ONCE)
     // =============================
-    if (
-      foundEvent.type === "offline" &&
-      foundEvent.allowedRegion &&
-      foundEvent.allowedRegion.length > 0
-    ) {
-      const inside = isPointInsidePolygon(
+    if (foundEvent.type === "offline") {
+      if (!foundEvent.allowedRegion || foundEvent.allowedRegion.length === 0) {
+        return res.status(400).json("Event location not configured");
+      }
+
+      const isInside = isPointInsidePolygon(
         [Number(longitude), Number(latitude)],
         foundEvent.allowedRegion
       );
 
-      if (!inside) {
+      if (!isInside) {
         return res.status(403).json("You are outside allowed region");
       }
-    }
-
-    // =============================
-    // REVERSE GEOCODING
-    // =============================
-    let address = "";
-
-    try {
-      const geoRes = await axios.get(
-        `https://nominatim.openstreetmap.org/reverse`,
-        {
-          params: {
-            lat: latitude,
-            lon: longitude,
-            format: "json",
-          },
-          headers: {
-            "User-Agent": "gdg-attendance-app"
-          }
-        }
-      );
-
-      address = geoRes.data.display_name || "";
-    } catch (geoError) {
-      console.log("Geocoding failed:", geoError.message);
     }
 
     // =============================
@@ -120,7 +97,6 @@ router.post("/mark", auth(["member"]), async (req, res) => {
       eventId: foundEvent._id,
       latitude: Number(latitude),
       longitude: Number(longitude),
-      address,
       ipAddress: req.ip,
     });
 
